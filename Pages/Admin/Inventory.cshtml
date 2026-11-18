@@ -1,0 +1,111 @@
+@page
+@model RestaurantOrder.Pages.Admin.InventoryModel
+@using RestaurantOrder.Data
+@{
+    ViewData["Title"] = "Kho";
+}
+
+<main class="page page-wide inventory">
+    <header class="report-head">
+        <div>
+            <h1>Kho</h1>
+            <p class="muted">Số phần còn lại của từng món. Kho tự trừ khi thu ngân xác nhận đơn và tự cộng lại khi đơn đã xác nhận bị hủy.</p>
+        </div>
+    </header>
+
+
+    <section class="stats report-stats" aria-label="Tổng quan kho">
+        <div class="stat">
+            <span class="stat-label">Số món</span>
+            <strong class="stat-value">@Model.TotalItems</strong>
+        </div>
+        <div class="stat @(Model.LowItems > 0 ? "stat-alert" : "")">
+            <span class="stat-label">Sắp hết (≤ @StockActions.LowStock phần)</span>
+            <strong class="stat-value">@Model.LowItems</strong>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Hết hàng</span>
+            <strong class="stat-value">@Model.OutItems</strong>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Ngừng bán</span>
+            <strong class="stat-value">@Model.StoppedItems</strong>
+        </div>
+    </section>
+
+    <div class="inventory-toolbar">
+        <nav class="presets" aria-label="Lọc món">
+            <a asp-page="/Admin/Inventory" class="preset @(Model.Filter is null ? "active" : "")">Tất cả</a>
+            <a asp-page="/Admin/Inventory" asp-route-filter="low"
+               class="preset @(Model.Filter == "low" ? "active" : "")">Sắp hết / hết hàng</a>
+        </nav>
+        <p class="hint">Nhập kho: gõ số phần ở cột bên phải rồi bấm <strong>Nhập</strong>. Gõ số âm (ví dụ −3) để trừ khi kiểm kê thấy thiếu.</p>
+    </div>
+
+    @if (Model.Groups.Count == 0)
+    {
+        <section class="card report-card"><p class="empty">Không có món nào sắp hết. Kho đang đủ hàng.</p></section>
+    }
+
+    @foreach (var (category, items) in Model.Groups)
+    {
+        <section class="card report-card stock-group">
+            <h2>@category</h2>
+            <table class="data-table stock-table">
+                <thead>
+                    <tr>
+                        <th>Món</th>
+                        <th class="num">Giá</th>
+                        <th class="num">Tồn kho</th>
+                        <th>Trạng thái</th>
+                        <th class="stock-actions-head">Sửa / Nhập kho</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var m in items)
+                {
+                    var (text, css) = InventoryModel.StatusOf(m);
+                    <tr id="item-@m.Id">
+                        <td>@m.Name</td>
+                        <td class="num">@Format.Money(m.Price)</td>
+                        <td class="num"><strong>@m.Stock</strong></td>
+                        <td><span class="stock-badge stock-@css">@text</span></td>
+                        <td class="stock-actions">
+                          <div class="stock-actions-inner">
+                            <form method="post" asp-page-handler="Adjust" class="stock-adjust">
+                                <input type="hidden" name="id" value="@m.Id" />
+                                <input type="hidden" name="filter" value="@Model.Filter" />
+                                <input type="number" name="add" class="stock-add" step="1" inputmode="numeric" required
+                                       placeholder="Số phần" title="Số âm để trừ khi kiểm kê"
+                                       aria-label="Số phần nhập thêm cho @m.Name" />
+                                <button type="submit" class="btn btn-primary btn-sm">Nhập</button>
+                            </form>
+                            <form method="post" asp-page-handler="Toggle">
+                                <input type="hidden" name="id" value="@m.Id" />
+                                <input type="hidden" name="filter" value="@Model.Filter" />
+                                <button type="submit" class="btn btn-ghost btn-sm">@(m.IsAvailable ? "Ngừng bán" : "Bán lại")</button>
+                            </form>
+                          </div>
+                          @if (Model.EditedId == m.Id && !string.IsNullOrEmpty(Model.ErrorMessage))
+                          {
+                              <p class="stock-msg stock-msg-error" role="alert">@Model.ErrorMessage</p>
+                          }
+                          else if (Model.EditedId == m.Id && !string.IsNullOrEmpty(Model.StatusMessage))
+                          {
+                              <p class="stock-msg" role="status">@Model.StatusMessage</p>
+                          }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </section>
+    }
+</main>
+
+@section Scripts {
+<script>
+    // Tránh bấm 2 lần khi mạng chậm
+    document.addEventListener('submit', e => e.target.querySelectorAll('button[type=submit]').forEach(b => b.disabled = true));
+</script>
+}

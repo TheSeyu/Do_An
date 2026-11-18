@@ -55,7 +55,10 @@ CREATE TABLE MenuItems (
     Name        nvarchar(150) NOT NULL,
     Price       decimal(18,0) NOT NULL,
     ImageUrl    nvarchar(300) NULL,
-    IsAvailable bit NOT NULL CONSTRAINT DF_MenuItems_IsAvailable DEFAULT 1
+    IsAvailable bit NOT NULL CONSTRAINT DF_MenuItems_IsAvailable DEFAULT 1,
+    -- Số phần còn trong kho: trừ khi thu ngân xác nhận đơn, cộng khi nhập kho
+    Stock       int NOT NULL CONSTRAINT DF_MenuItems_Stock DEFAULT 0
+                CONSTRAINT CK_MenuItems_Stock CHECK (Stock >= 0)
 );
 CREATE INDEX IX_MenuItems_CategoryId ON MenuItems(CategoryId);
 
@@ -169,25 +172,25 @@ INSERT INTO Categories (Id, Name, SortOrder) VALUES
     (4, N'Đồ uống', 4);
 SET IDENTITY_INSERT Categories OFF;
 
--- Món ăn (Mì Quảng đang HẾT MÓN để thử trường hợp từ chối đơn)
+-- Món ăn và tồn kho: Mì Quảng hết hàng (để thử từ chối đơn), Nem rán và Lẩu gà sắp hết
 SET IDENTITY_INSERT MenuItems ON;
-INSERT INTO MenuItems (Id, CategoryId, Name, Price, ImageUrl, IsAvailable) VALUES
-    (1, 1, N'Phở bò tái', 45000, NULL, 1),
-    (2, 1, N'Bún chả Hà Nội', 40000, NULL, 1),
-    (3, 1, N'Cơm gà xối mỡ', 55000, NULL, 1),
-    (4, 1, N'Cơm tấm sườn bì', 50000, NULL, 1),
-    (5, 1, N'Bún bò Huế', 45000, NULL, 1),
-    (6, 1, N'Mì Quảng', 40000, NULL, 0),
-    (7, 2, N'Nem rán (4 cái)', 35000, NULL, 1),
-    (8, 2, N'Gỏi cuốn tôm thịt', 30000, NULL, 1),
-    (9, 2, N'Khoai tây chiên', 25000, NULL, 1),
-    (10, 3, N'Lẩu Thái hải sản', 250000, NULL, 1),
-    (11, 3, N'Lẩu gà lá é', 220000, NULL, 1),
-    (12, 4, N'Trà đá', 5000, NULL, 1),
-    (13, 4, N'Nước cam ép', 25000, NULL, 1),
-    (14, 4, N'Cà phê sữa đá', 20000, NULL, 1),
-    (15, 4, N'Nước suối', 10000, NULL, 1),
-    (16, 4, N'Coca-Cola', 15000, NULL, 1);
+INSERT INTO MenuItems (Id, CategoryId, Name, Price, ImageUrl, IsAvailable, Stock) VALUES
+    (1, 1, N'Phở bò tái', 45000, NULL, 1, 30),
+    (2, 1, N'Bún chả Hà Nội', 40000, NULL, 1, 25),
+    (3, 1, N'Cơm gà xối mỡ', 55000, NULL, 1, 20),
+    (4, 1, N'Cơm tấm sườn bì', 50000, NULL, 1, 20),
+    (5, 1, N'Bún bò Huế', 45000, NULL, 1, 25),
+    (6, 1, N'Mì Quảng', 40000, NULL, 1, 0),
+    (7, 2, N'Nem rán (4 cái)', 35000, NULL, 1, 3),
+    (8, 2, N'Gỏi cuốn tôm thịt', 30000, NULL, 1, 15),
+    (9, 2, N'Khoai tây chiên', 25000, NULL, 1, 30),
+    (10, 3, N'Lẩu Thái hải sản', 250000, NULL, 1, 8),
+    (11, 3, N'Lẩu gà lá é', 220000, NULL, 1, 2),
+    (12, 4, N'Trà đá', 5000, NULL, 1, 200),
+    (13, 4, N'Nước cam ép', 25000, NULL, 1, 40),
+    (14, 4, N'Cà phê sữa đá', 20000, NULL, 1, 50),
+    (15, 4, N'Nước suối', 10000, NULL, 1, 60),
+    (16, 4, N'Coca-Cola', 15000, NULL, 1, 48);
 SET IDENTITY_INSERT MenuItems OFF;
 
 -- Bàn: QrToken là chuỗi in trong mã QR -> /order/t/{QrToken}. Bàn 02, 03, 06, 09 đang sử dụng.

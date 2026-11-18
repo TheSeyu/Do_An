@@ -38,7 +38,13 @@ public class MenuItem
     [Required, MaxLength(150)] public string Name { get; set; } = "";
     [Column(TypeName = "decimal(18,0)")] public decimal Price { get; set; }
     [MaxLength(300)] public string? ImageUrl { get; set; }
+    /// <summary>Quản lý tạm ngừng bán món (khác với hết kho).</summary>
     public bool IsAvailable { get; set; } = true;
+    /// <summary>Số phần còn trong kho. Trừ khi thu ngân xác nhận đơn, cộng khi nhập kho.</summary>
+    public int Stock { get; set; }
+
+    /// <summary>Còn bán được cho khách: đang bán và còn kho.</summary>
+    public bool CanOrder => IsAvailable && Stock > 0;
 }
 
 public class DiningTable
