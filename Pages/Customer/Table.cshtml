@@ -65,18 +65,24 @@
                     <h2>@c.Name</h2>
                     @foreach (var m in c.MenuItems)
                     {
-                        <div class="dish @(m.IsAvailable ? "" : "sold-out")">
+                        <div class="dish @(m.CanOrder ? "" : "sold-out")">
                             <div class="dish-info">
                                 <span class="dish-name">@m.Name</span>
-                                <span class="dish-price">@Format.Money(m.Price)</span>
+                                <span class="dish-price">
+                                    @Format.Money(m.Price)
+                                    @if (m.CanOrder && m.Stock <= RestaurantOrder.Data.StockActions.LowStock)
+                                    {
+                                        <span class="dish-left">· còn @m.Stock phần</span>
+                                    }
+                                </span>
                             </div>
-                            @if (m.IsAvailable)
+                            @if (m.CanOrder)
                             {
                                 <input type="hidden" name="Lines[@index].MenuItemId" value="@m.Id" />
                                 <div class="stepper">
                                     <button type="button" class="step" data-step="-1" aria-label="Bớt @m.Name">−</button>
                                     <input type="number" name="Lines[@index].Quantity" value="@Model.QuantityOf(m.Id)"
-                                           min="0" max="20" inputmode="numeric" data-price="@((int)m.Price)"
+                                           min="0" max="@Math.Min(20, m.Stock)" inputmode="numeric" data-price="@((int)m.Price)"
                                            aria-label="Số lượng @m.Name" />
                                     <button type="button" class="step" data-step="1" aria-label="Thêm @m.Name">+</button>
                                 </div>
@@ -119,7 +125,7 @@
     function refresh() {
         let count = 0, total = 0;
         for (const i of inputs) {
-            const q = Math.max(0, Math.min(20, parseInt(i.value) || 0));
+            const q = Math.max(0, Math.min(Number(i.max) || 20, parseInt(i.value) || 0));
             count += q;
             total += q * Number(i.dataset.price);
             i.closest('.dish').classList.toggle('picked', q > 0);
@@ -133,7 +139,7 @@
         const btn = e.target.closest('.step');
         if (!btn) return;
         const input = btn.parentElement.querySelector('input');
-        input.value = Math.max(0, Math.min(20, (parseInt(input.value) || 0) + Number(btn.dataset.step)));
+        input.value = Math.max(0, Math.min(Number(input.max) || 20, (parseInt(input.value) || 0) + Number(btn.dataset.step)));
         refresh();
     });
     form.addEventListener('input', refresh);

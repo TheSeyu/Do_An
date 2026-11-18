@@ -67,9 +67,16 @@ public class TableModel : PageModel
             ModelState.AddModelError(string.Empty, "Chọn ít nhất 1 món trước khi gửi đơn.");
         if (lines.Any(l => l.Quantity > MaxQuantity))
             ModelState.AddModelError(string.Empty, $"Mỗi món tối đa {MaxQuantity} phần trong một đơn.");
-        foreach (var l in lines.Where(l => !items.TryGetValue(l.MenuItemId, out var m) || !m.IsAvailable))
-            ModelState.AddModelError(string.Empty,
-                $"Món “{(items.TryGetValue(l.MenuItemId, out var m) ? m.Name : "không rõ")}” đã hết, vui lòng bỏ ra khỏi đơn.");
+        foreach (var l in lines)
+        {
+            if (!items.TryGetValue(l.MenuItemId, out var m) || !m.IsAvailable)
+                ModelState.AddModelError(string.Empty,
+                    $"Món “{m?.Name ?? "không rõ"}” hiện ngừng bán, vui lòng bỏ ra khỏi đơn.");
+            else if (m.Stock == 0)
+                ModelState.AddModelError(string.Empty, $"Món “{m.Name}” đã hết, vui lòng bỏ ra khỏi đơn.");
+            else if (l.Quantity > m.Stock)
+                ModelState.AddModelError(string.Empty, $"Món “{m.Name}” chỉ còn {m.Stock} phần.");
+        }
 
         if (!ModelState.IsValid)
         {
@@ -130,8 +137,10 @@ public class TableModel : PageModel
 
     private async Task LoadAsync(TableSession session)
     {
-        Menu = await _db.Categories.OrderBy(c => c.SortOrder)
-            .Include(c => c.MenuItems.OrderBy(m => m.Id))
+        // AsNoTracking: món ngừng bán nằm trong đơn cũ (tải ở dưới) không bị EF tự gắn ngược vào menu
+        Menu = await _db.Categories.AsNoTracking().OrderBy(c => c.SortOrder)
+            // Món ngừng bán bị ẩn hẳn; món hết kho vẫn hiện "Hết món" để khách biết quán có món này
+            .Include(c => c.MenuItems.Where(m => m.IsAvailable).OrderBy(m => m.Id))
             .ToListAsync();
         Orders = await _db.Orders.Where(o => o.TableSessionId == session.Id)
             .Include(o => o.Items).ThenInclude(i => i.MenuItem)

@@ -118,16 +118,27 @@ public class IndexModel : PageModel
 
     public async Task<IActionResult> OnPostConfirmAsync(int orderId)
     {
-        var order = await _db.Orders.Include(o => o.TableSession).FirstOrDefaultAsync(o => o.Id == orderId);
+        var order = await _db.Orders.Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == orderId);
         if (order is null) return Back(error: "Không tìm thấy đơn.");
         if (order.Status != OrderStatus.Pending)
             return Back(error: $"Đơn {order.Code} đã được xử lý trước đó ({order.Status.ToText()}).");
+
+        // Xác nhận = trừ kho. Thiếu bất kỳ món nào thì hoàn tác toàn bộ, đơn vẫn chờ xác nhận.
+        await using var tx = await _db.Database.BeginTransactionAsync();
+        var shortages = await StockActions.TakeAsync(_db, order.Items);
+        if (shortages.Count > 0)
+        {
+            await tx.RollbackAsync();
+            return Back(error: $"Không đủ kho để xác nhận đơn {order.Code}: {string.Join(", ", shortages)}. "
+                               + "Hãy từ chối đơn hoặc nhờ quản lý nhập thêm kho.");
+        }
 
         order.Status = OrderStatus.Confirmed;
         order.HandledById = UserId;
         order.HandledAt = DateTime.Now;
         await _db.SaveChangesAsync();
-        return Back(ok: $"Đã xác nhận đơn {order.Code}. Đơn đang chờ thanh toán.");
+        await tx.CommitAsync();
+        return Back(ok: $"Đã xác nhận đơn {order.Code} và trừ kho. Đơn đang chờ thanh toán.");
     }
 
     public async Task<IActionResult> OnPostRejectAsync(int orderId, int reasonId, string? note)
