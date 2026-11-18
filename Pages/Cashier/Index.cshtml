@@ -1,0 +1,530 @@
+@page
+@model RestaurantOrder.Pages.Cashier.IndexModel
+@using RestaurantOrder.Models
+@{
+    ViewData["Title"] = "Thu ngân";
+    var occupied = Model.Tables.Count(t => t.Occupied);
+    var unpaidAll = Model.Tables.Sum(t => t.Unpaid);
+}
+
+<div class="toasts" id="toasts" aria-live="assertive"></div>
+
+<main class="cashier" id="cashier" data-version="@Model.Version" data-table="@Model.SelectedId"
+      data-pending="@string.Join(",", Model.Queue.Select(o => o.Id))">
+    <div class="live-bar">
+        <span class="live-dot" id="live-dot" title="Đang tự cập nhật mỗi 2 giây"></span>
+        <span class="live-text" id="live-text">Tự cập nhật mỗi 2 giây</span>
+        <button type="button" class="btn btn-ghost btn-sm" id="alert-toggle">Bật âm báo</button>
+    </div>
+    <div class="update-bar" id="update-bar" role="status" hidden>
+        <span>Có thay đổi mới. Màn hình sẽ cập nhật khi bạn nhập xong.</span>
+        <button type="button" class="btn btn-primary btn-sm" data-refresh-now>Cập nhật ngay</button>
+    </div>
+
+    <section class="stats" aria-label="Tổng quan ca làm">
+        <div class="stat @(Model.Queue.Count > 0 ? "stat-alert" : "")">
+            <span class="stat-label">Chờ xác nhận</span>
+            <strong class="stat-value">@Model.Queue.Count</strong>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Chờ thanh toán</span>
+            <strong class="stat-value">@unpaidAll</strong>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Bàn đang dùng</span>
+            <strong class="stat-value">@occupied<small>/@Model.Tables.Count</small></strong>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Đã thu hôm nay</span>
+            <strong class="stat-value">@Format.Money(Model.RevenueToday)</strong>
+            <span class="stat-sub">@Model.PaidToday đơn</span>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="notice" role="status">@Model.StatusMessage</div>
+    }
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert" role="alert">@Model.ErrorMessage</div>
+    }
+
+    <div class="cashier-grid">
+        <div class="cashier-side">
+            <section class="card floor-card">
+                <div class="section-head">
+                    <h2>Sơ đồ bàn</h2>
+                    <span class="legend"><i class="dot"></i>Trống <i class="dot dot-busy"></i>Đang dùng</span>
+                </div>
+                <nav class="floor" aria-label="Chọn bàn">
+                    @foreach (var t in Model.Tables)
+                    {
+                        <a asp-page="/Cashier/Index" asp-route-table="@t.Id"
+                           class="tile @(t.Occupied ? "busy" : "") @(t.Id == Model.SelectedId ? "selected" : "")"
+                           aria-current="@(t.Id == Model.SelectedId ? "true" : null)">
+                            <span class="tile-name">@t.Name.Replace("Bàn ", "")</span>
+                            <span class="tile-meta">@(t.Occupied ? "Đang dùng" : $"{t.Capacity} chỗ")</span>
+                            @if (t.Pending > 0)
+                            {
+                                <span class="tile-badge" title="@t.Pending đơn chờ xác nhận">@t.Pending mới</span>
+                            }
+                            else if (t.Unpaid > 0)
+                            {
+                                <span class="tile-badge tile-badge-pay" title="@t.Unpaid đơn chờ thanh toán">@t.Unpaid chờ TT</span>
+                            }
+                        </a>
+                    }
+                </nav>
+            </section>
+
+            <section class="card queue-card">
+                <div class="section-head">
+                    <h2>Đơn chờ xác nhận</h2>
+                    <span class="count-pill">@Model.Queue.Count</span>
+                </div>
+                @if (Model.Queue.Count == 0)
+                {
+                    <p class="empty">Chưa có đơn mới. Màn hình tự cập nhật khi khách gửi đơn.</p>
+                }
+                else
+                {
+                    <ul class="queue">
+                        @foreach (var o in Model.Queue)
+                        {
+                            <li>
+                                <a asp-page="/Cashier/Index" asp-route-table="@o.TableSession.TableId" asp-fragment="order-@o.Id"
+                                   class="queue-item @(o.TableSession.TableId == Model.SelectedId ? "selected" : "")">
+                                    <span class="queue-main">
+                                        <strong>@o.TableSession.Table.Name</strong>
+                                        <span class="muted-inline">@o.Code · @o.Items.Sum(i => i.Quantity) món</span>
+                                    </span>
+                                    <span class="queue-side">
+                                        <strong>@Format.Money(o.TotalAmount)</strong>
+                                        <span class="muted-inline">@Format.Ago(o.CreatedAt)</span>
+                                    </span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        </div>
+
+        <section class="card cashier-detail" aria-live="polite">
+            @if (Model.Selected is null)
+            {
+                <div class="detail-empty">
+                    <h2>Chọn một bàn</h2>
+                    <p class="muted">Bấm vào bàn trên sơ đồ để xem đơn, xác nhận và thu tiền.</p>
+                </div>
+            }
+            else
+            {
+                <header class="detail-head">
+                    <div>
+                        <h2>@Model.Selected.Name</h2>
+                        @if (Model.Session is not null)
+                        {
+                            <p class="muted-inline">Khách vào: @Format.When(Model.Session.StartedAt)</p>
+                        }
+                        else
+                        {
+                            <p class="muted-inline">@Model.Selected.Capacity chỗ</p>
+                        }
+                    </div>
+                    <span class="table-state @(Model.Session is not null ? "busy" : "")">
+                        @(Model.Session is not null || Model.Selected.Status == TableStatus.Occupied ? "Đang sử dụng" : "Trống")
+                    </span>
+                </header>
+
+                @if (Model.Session is null)
+                {
+                    <p class="empty">Bàn đang trống. Khách quét mã QR trên bàn để bắt đầu gọi món.</p>
+                }
+                else if (Model.Orders.Count == 0)
+                {
+                    <p class="empty">Khách đã quét mã nhưng chưa gửi đơn nào.</p>
+                }
+
+                @foreach (var o in Model.Orders)
+                {
+                    <article class="bill bill-@((int)o.Status)" id="order-@o.Id">
+                        <div class="bill-head">
+                            <div>
+                                <strong class="bill-code">@o.Code</strong>
+                                <span class="muted-inline">@Format.When(o.CreatedAt)</span>
+                            </div>
+                            <span class="status status-@((int)o.Status)">@o.Status.ToText()</span>
+                        </div>
+
+                        <table class="bill-items">
+                            <tbody>
+                            @foreach (var i in o.Items)
+                            {
+                                <tr>
+                                    <td class="qty">@i.Quantity ×</td>
+                                    <td>@i.MenuItem.Name @if (!string.IsNullOrEmpty(i.Note)) { <span class="muted-inline">(@i.Note)</span> }</td>
+                                    <td class="num">@Format.Money(i.UnitPrice * i.Quantity)</td>
+                                </tr>
+                            }
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="2">Tổng cộng</td>
+                                    <td class="num">@Format.Money(o.TotalAmount)</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+
+                        @if (!string.IsNullOrEmpty(o.CustomerNote))
+                        {
+                            <p class="bill-note">Ghi chú của khách: @o.CustomerNote</p>
+                        }
+
+                        @switch (o.Status)
+                        {
+                            case OrderStatus.Pending:
+                                <div class="bill-actions">
+                                    <form method="post" asp-page-handler="Confirm">
+                                        <input type="hidden" name="table" value="@Model.SelectedId" />
+                                        <input type="hidden" name="orderId" value="@o.Id" />
+                                        <button type="submit" class="btn btn-primary">Xác nhận đơn</button>
+                                    </form>
+                                    <details class="inline-form">
+                                        <summary class="btn btn-danger-ghost">Từ chối</summary>
+                                        <form method="post" asp-page-handler="Reject" class="reject-form">
+                                            <input type="hidden" name="table" value="@Model.SelectedId" />
+                                            <input type="hidden" name="orderId" value="@o.Id" />
+                                            <div class="field">
+                                                <label for="reason-@o.Id">Lý do từ chối</label>
+                                                <select id="reason-@o.Id" name="reasonId" required>
+                                                    @foreach (var r in Model.Reasons)
+                                                    {
+                                                        <option value="@r.Id">@r.Content</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="field">
+                                                <label for="note-@o.Id">Ghi chú <span class="muted-inline">(bắt buộc khi chọn “Khác”)</span></label>
+                                                <input id="note-@o.Id" name="note" maxlength="300" autocomplete="off" />
+                                            </div>
+                                            <button type="submit" class="btn btn-danger">Xác nhận từ chối</button>
+                                        </form>
+                                    </details>
+                                </div>
+                                break;
+
+                            case OrderStatus.Confirmed:
+                                <form method="post" asp-page-handler="Pay" class="pay-form" data-total="@((long)o.TotalAmount)">
+                                    <input type="hidden" name="table" value="@Model.SelectedId" />
+                                    <input type="hidden" name="orderId" value="@o.Id" />
+                                    <div class="pay-methods" role="radiogroup" aria-label="Hình thức thanh toán">
+                                        <label class="pay-option"><input type="radio" name="method" value="@((int)PaymentMethod.Cash)" checked /> Tiền mặt</label>
+                                        <label class="pay-option"><input type="radio" name="method" value="@((int)PaymentMethod.BankTransfer)" /> Chuyển khoản</label>
+                                    </div>
+                                    <div class="cash-calc">
+                                        <label for="given-@o.Id">Khách đưa</label>
+                                        <input id="given-@o.Id" type="number" class="cash-given" min="0" step="1000" inputmode="numeric" placeholder="@((long)o.TotalAmount)" />
+                                        <span class="change">Tiền thừa: <strong>—</strong></span>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">Thu @Format.Money(o.TotalAmount)</button>
+                                </form>
+                                break;
+
+                            case OrderStatus.Rejected:
+                                <p class="bill-info bill-info-danger">
+                                    Lý do: @(o.RejectReason?.Content)@(string.IsNullOrEmpty(o.RejectNote) ? "" : " – " + o.RejectNote)
+                                </p>
+                                break;
+
+                            case OrderStatus.Cancelled:
+                                <p class="bill-info">Đơn đã hủy, không thu tiền.</p>
+                                break;
+
+                            case OrderStatus.Paid:
+                                if (o.Payment is not null)
+                                {
+                                    <p class="bill-info bill-info-ok">
+                                        Đã thu @Format.Money(o.Payment.Amount) · @o.Payment.Method.ToText() lúc @o.Payment.PaidAt.ToString("HH:mm")
+                                    </p>
+                                }
+                                break;
+                        }
+                    </article>
+                }
+
+                @if (Model.Session is not null || Model.Selected.Status == TableStatus.Occupied)
+                {
+                    <footer class="table-actions">
+                        <form method="post" asp-page-handler="Close"
+                              onsubmit="return confirm('Đóng @Model.Selected.Name? Bàn sẽ trống để khách mới quét mã.')">
+                            <input type="hidden" name="table" value="@Model.SelectedId" />
+                            <button type="submit" class="btn btn-primary" disabled="@(Model.UnpaidCount > 0)">Đóng bàn</button>
+                        </form>
+                        <details class="inline-form">
+                            <summary class="btn btn-ghost">Giải phóng bàn</summary>
+                            <form method="post" asp-page-handler="Release" class="release-form">
+                                <input type="hidden" name="table" value="@Model.SelectedId" />
+                                <div class="field">
+                                    <label for="release-reason">Lý do giải phóng</label>
+                                    <input id="release-reason" name="reason" required maxlength="200" autocomplete="off"
+                                           placeholder="Ví dụ: Khách đã rời đi nhưng không đóng bàn" />
+                                </div>
+                                @if (Model.UnpaidCount > 0)
+                                {
+                                    <p class="hint">@Model.UnpaidCount đơn chưa thanh toán sẽ bị hủy.</p>
+                                }
+                                <button type="submit" class="btn btn-danger">Giải phóng</button>
+                            </form>
+                        </details>
+                        @if (Model.UnpaidCount > 0)
+                        {
+                            <p class="hint table-hint">Còn @Model.UnpaidCount đơn chưa xác nhận hoặc chưa thanh toán nên chưa đóng bàn được.</p>
+                        }
+                    </footer>
+                }
+            }
+        </section>
+    </div>
+</main>
+
+@section Scripts {
+<script>
+(() => {
+    const POLL_MS = 2000;      // hỏi server mỗi 2 giây -> đơn mới hiện trong khoảng 2–3 giây
+    const REFRESH_MS = 30000;  // vẽ lại định kỳ để "x phút trước" luôn đúng
+    const money = v => v.toLocaleString('vi-VN') + ' đ';
+    let root = document.getElementById('cashier');
+    let lastRender = Date.now();
+
+    // Tiền thừa khi thu tiền mặt; ẩn ô "Khách đưa" khi chọn chuyển khoản
+    function initPayForms(scope) {
+        for (const form of scope.querySelectorAll('.pay-form')) {
+            const total = Number(form.dataset.total);
+            const calc = form.querySelector('.cash-calc');
+            const given = form.querySelector('.cash-given');
+            const change = form.querySelector('.change strong');
+            const update = () => {
+                calc.hidden = form.querySelector('input[name=method]:checked').value !== '0';
+                const g = Number(given.value);
+                change.textContent = !given.value ? '—' : g < total ? 'Thiếu ' + money(total - g) : money(g - total);
+                change.classList.toggle('short', !!given.value && g < total);
+            };
+            form.addEventListener('input', update);
+            form.addEventListener('change', update);
+            update();
+        }
+    }
+
+    // ---------- Vẽ lại nội dung mà không tải lại cả trang ----------
+    // Thay khối <main id="cashier"> bằng bản mới từ server: không nháy màn hình, giữ vị trí cuộn
+    // và giữ âm báo đã bật (tải lại cả trang thì trình duyệt khóa âm thanh lại).
+    function render(html, url) {
+        const next = new DOMParser().parseFromString(html, 'text/html').getElementById('cashier');
+        if (!next) { location.href = url; return; } // không phải trang thu ngân (vd. hết phiên đăng nhập)
+        const y = window.scrollY;
+        root.replaceWith(next);
+        root = next;
+        initPayForms(root);
+        renderAlertToggle();
+        for (const id of pendingIds(root)) known.add(id);
+        const u = new URL(url, location.href);
+        history.replaceState(null, '', u.pathname + u.search + u.hash);
+        if (u.hash) document.getElementById(u.hash.slice(1))?.scrollIntoView({ block: 'center' });
+        else window.scrollTo(0, y);
+        lastRender = Date.now();
+    }
+
+    async function reloadView(url) {
+        const target = new URL(url ?? location.href, location.href);
+        if (!url) {
+            // Tự vẽ lại: giữ bàn đang xem, không cuộn lại về đơn trong #order-…
+            if (root.dataset.table) target.search = '?table=' + root.dataset.table;
+            target.hash = '';
+        }
+        const res = await fetch(target, { headers: { Accept: 'text/html' }, cache: 'no-store' });
+        render(await res.text(), res.url + target.hash);
+    }
+
+    // Đang chọn lý do / nhập tiền khách đưa thì không vẽ lại, tránh mất chữ đang gõ
+    const busy = () => root.querySelector('details[open]') ||
+        (root.contains(document.activeElement) && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName));
+
+    // Bấm bàn / đơn trong hàng chờ: đổi nội dung tại chỗ
+    document.addEventListener('click', e => {
+        if (e.target.closest('#alert-toggle')) { toggleAlerts(); return; }
+        if (e.target.closest('[data-refresh-now]')) { reloadView(); return; }
+        const link = e.target.closest('a[href]');
+        if (!link || !root.contains(link) || link.pathname !== location.pathname
+            || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        reloadView(link.href).catch(() => location.href = link.href);
+    });
+
+    // Gửi form (xác nhận, từ chối, thu tiền, đóng bàn) bằng fetch rồi vẽ lại trang kết quả
+    document.addEventListener('submit', async e => {
+        const form = e.target;
+        if (e.defaultPrevented || !root.contains(form)) return; // hộp confirm() bị hủy
+        e.preventDefault();
+        form.querySelectorAll('button[type=submit]').forEach(b => b.disabled = true); // tránh bấm 2 lần
+        try {
+            const res = await fetch(form.action, { method: 'POST', body: new FormData(form) });
+            render(await res.text(), res.url);
+        } catch {
+            form.submit(); // mạng lỗi: gửi form theo cách thường
+        }
+    });
+
+    // ---------- Báo đơn mới: ô thông báo, âm báo, tiêu đề tab, thông báo Windows ----------
+    const pendingIds = el => (el.dataset.pending || '').split(',').filter(Boolean).map(Number);
+    const known = new Set(pendingIds(root));
+    let audio = null;
+    let alertsOn = false;
+    try { alertsOn = localStorage.getItem('cashier-alerts') === 'on'; } catch { }
+
+    function renderAlertToggle() {
+        const btn = document.getElementById('alert-toggle');
+        btn.textContent = alertsOn ? 'Âm báo: bật' : 'Bật âm báo';
+        btn.classList.toggle('on', alertsOn);
+    }
+
+    // Trình duyệt chỉ cho phát âm thanh sau khi người dùng đã bấm vào trang
+    function unlockAudio() {
+        try { audio ??= new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
+        if (audio.state === 'suspended') audio.resume();
+    }
+    document.addEventListener('pointerdown', unlockAudio);
+    document.addEventListener('keydown', unlockAudio);
+
+    function beep() {
+        if (!alertsOn || !audio || audio.state !== 'running') return;
+        const t = audio.currentTime;
+        [880, 1175, 1568].forEach((freq, i) => {
+            const osc = audio.createOscillator(), gain = audio.createGain();
+            const start = t + i * 0.16;
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.0001, start);
+            gain.gain.exponentialRampToValueAtTime(0.35, start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.15);
+            osc.connect(gain).connect(audio.destination);
+            osc.start(start);
+            osc.stop(start + 0.16);
+        });
+    }
+
+    async function toggleAlerts() {
+        alertsOn = !alertsOn;
+        try { localStorage.setItem('cashier-alerts', alertsOn ? 'on' : 'off'); } catch { }
+        if (alertsOn) {
+            unlockAudio();
+            beep(); // phát thử
+            if ('Notification' in window && Notification.permission === 'default')
+                try { await Notification.requestPermission(); } catch { }
+        }
+        renderAlertToggle();
+    }
+
+    const toasts = document.getElementById('toasts');
+    function showToast(o) {
+        const a = document.createElement('a');
+        a.className = 'toast';
+        a.href = '?table=' + o.tableId + '#order-' + o.id;
+        const title = document.createElement('strong');
+        title.textContent = 'Đơn mới ' + o.code;
+        const body = document.createElement('span');
+        body.textContent = o.table + ' · ' + o.total;
+        a.append(title, body);
+        a.addEventListener('click', e => {
+            e.preventDefault();
+            a.remove();
+            reloadView(a.href).catch(() => location.href = a.href);
+        });
+        toasts.prepend(a);
+        setTimeout(() => a.remove(), 20000);
+    }
+
+    // Thông báo Windows khi thu ngân đang mở tab hoặc cửa sổ khác (chỉ chạy trên localhost/HTTPS)
+    function notifySystem(o) {
+        if (!alertsOn || !document.hidden || !('Notification' in window) || Notification.permission !== 'granted') return;
+        const n = new Notification('Đơn mới ' + o.code, { body: o.table + ' · ' + o.total, tag: 'order-' + o.id });
+        n.onclick = () => { window.focus(); n.close(); reloadView('?table=' + o.tableId + '#order-' + o.id); };
+    }
+
+    // Nhấp nháy tiêu đề tab cho tới khi thu ngân quay lại trang
+    const baseTitle = document.title;
+    let unseen = 0, flashTimer = null;
+    function flashTitle(count) {
+        unseen += count;
+        if (flashTimer) return;
+        let on = false;
+        flashTimer = setInterval(() => {
+            on = !on;
+            document.title = on ? `(${unseen}) Đơn mới!` : baseTitle;
+        }, 1000);
+    }
+    function stopFlash() {
+        unseen = 0;
+        clearInterval(flashTimer);
+        flashTimer = null;
+        document.title = baseTitle;
+    }
+    window.addEventListener('focus', stopFlash);
+
+    function setLive(ok) {
+        document.getElementById('live-dot')?.classList.toggle('off', !ok);
+        const text = document.getElementById('live-text');
+        if (text) text.textContent = ok ? 'Tự cập nhật mỗi 2 giây' : 'Mất kết nối tới máy chủ, đang thử lại…';
+    }
+
+    // ---------- Hỏi server mỗi 2 giây ----------
+    let polling = false, failures = 0;
+    async function poll() {
+        if (polling) return;
+        polling = true;
+        try {
+            const res = await fetch('?handler=State', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+            if (res.redirected) { location.reload(); return; } // hết phiên đăng nhập
+            if (!res.ok) throw new Error(res.status);
+            const data = await res.json();
+            failures = 0;
+            setLive(true);
+
+            const fresh = data.pending.filter(o => !known.has(o.id));
+            for (const o of fresh) {
+                known.add(o.id);
+                showToast(o);
+                notifySystem(o);
+            }
+            if (fresh.length) {
+                beep();
+                if (document.hidden || !document.hasFocus()) flashTitle(fresh.length);
+            }
+
+            const changed = data.version !== root.dataset.version;
+            if (changed || Date.now() - lastRender > REFRESH_MS) {
+                if (!busy()) await reloadView();
+                else if (changed) document.getElementById('update-bar').hidden = false;
+            }
+        } catch {
+            if (++failures >= 3) setLive(false);
+        } finally {
+            polling = false;
+        }
+    }
+
+    // Đếm giờ trong Web Worker: trình duyệt không làm chậm bộ đếm này khi tab bị ẩn lâu,
+    // nên thu ngân mở tab khác vẫn được báo đúng hạn.
+    try {
+        const worker = new Worker(URL.createObjectURL(new Blob(
+            [`setInterval(() => postMessage(0), ${POLL_MS});`], { type: 'text/javascript' })));
+        worker.onmessage = poll;
+    } catch {
+        setInterval(poll, POLL_MS);
+    }
+
+    initPayForms(root);
+    renderAlertToggle();
+})();
+</script>
+}

@@ -1,0 +1,215 @@
+@page
+@model RestaurantOrder.Pages.Admin.RevenueModel
+@using System.Globalization
+@using RestaurantOrder.Models
+@{
+    ViewData["Title"] = "Báo cáo doanh thu";
+    var inv = CultureInfo.InvariantCulture;
+    string Pct(decimal part, decimal whole) => whole > 0 ? (part / whole * 100).ToString("0.##", inv) : "0";
+    var axisMax = Model.AxisMax;
+    var labelEvery = Math.Max(1, (int)Math.Ceiling(Model.DayCount / 10.0));
+    var maxItem = Model.TopItems.Count > 0 ? Model.TopItems.Max(i => i.Revenue) : 0;
+    var periodText = Model.DayCount == 1
+        ? Model.Start.ToString("dd/MM/yyyy")
+        : $"{Model.Start:dd/MM/yyyy} – {Model.End:dd/MM/yyyy}";
+}
+
+<main class="page page-wide report">
+    <header class="report-head">
+        <div>
+            <h1>Báo cáo doanh thu</h1>
+            <p class="muted">@periodText · @Model.DayCount ngày · tính theo thời điểm thu tiền</p>
+        </div>
+        <button type="button" class="btn btn-ghost no-print" onclick="window.print()">In báo cáo</button>
+    </header>
+
+    <form method="get" class="filters no-print" aria-label="Chọn khoảng thời gian">
+        <nav class="presets">
+            @foreach (var (key, label) in RevenueModel.Presets)
+            {
+                <a asp-page="/Admin/Revenue" asp-route-range="@key" class="preset @(Model.Range == key ? "active" : "")"
+                   aria-current="@(Model.Range == key ? "true" : null)">@label</a>
+            }
+        </nav>
+        <div class="custom-range">
+            <label for="From">Từ</label>
+            <input type="date" id="From" name="From" value="@Model.Start.ToString("yyyy-MM-dd")" />
+            <label for="To">đến</label>
+            <input type="date" id="To" name="To" value="@Model.End.ToString("yyyy-MM-dd")" />
+            <button type="submit" class="btn btn-primary btn-sm">Xem</button>
+        </div>
+    </form>
+
+    @if (Model.Notice is not null)
+    {
+        <div class="notice" role="status">@Model.Notice</div>
+    }
+
+    <section class="stats report-stats" aria-label="Tổng quan">
+        <div class="stat">
+            <span class="stat-label">Doanh thu</span>
+            <strong class="stat-value">@Format.Money(Model.Revenue)</strong>
+            @if (Model.ChangePercent is decimal change)
+            {
+                <span class="delta @(change >= 0 ? "up" : "down")">
+                    @(change >= 0 ? "▲ Tăng" : "▼ Giảm") @Math.Abs(change).ToString("0.#", CultureInfo.GetCultureInfo("vi-VN"))% so với @Model.DayCount ngày trước
+                </span>
+            }
+            else
+            {
+                <span class="stat-sub">Kỳ trước chưa có doanh thu để so sánh</span>
+            }
+        </div>
+        <div class="stat">
+            <span class="stat-label">Đơn đã thanh toán</span>
+            <strong class="stat-value">@Model.PaidOrders</strong>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Trung bình mỗi đơn</span>
+            <strong class="stat-value">@Format.Money(Model.AverageOrder)</strong>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Đơn không thu được tiền</span>
+            <strong class="stat-value">@(Model.RejectedOrders + Model.CancelledOrders)</strong>
+            <span class="stat-sub">@Model.RejectedOrders bị từ chối · @Model.CancelledOrders đã hủy</span>
+        </div>
+    </section>
+
+    <section class="card report-card">
+        <div class="section-head">
+            <h2>Doanh thu theo ngày</h2>
+        </div>
+        @if (Model.Revenue == 0)
+        {
+            <p class="empty">Chưa có khoản thu nào trong khoảng thời gian này.</p>
+        }
+        else
+        {
+            <div class="chart" role="group" aria-label="Biểu đồ cột doanh thu theo ngày">
+                <div class="chart-y" aria-hidden="true">
+                    <span style="bottom: 100%">@Format.ShortMoney(axisMax)</span>
+                    <span style="bottom: 50%">@Format.ShortMoney(axisMax / 2)</span>
+                    <span style="bottom: 0">0</span>
+                </div>
+                <div class="chart-body">
+                    <div class="chart-plot">
+                        <span class="grid-line" style="bottom: 100%"></span>
+                        <span class="grid-line" style="bottom: 50%"></span>
+                        <span class="grid-line base" style="bottom: 0"></span>
+                        <div class="cols" style="grid-template-columns: repeat(@Model.DayCount, 1fr)">
+                            @foreach (var d in Model.Days)
+                            {
+                                var text = $"{d.Day:dd/MM}: {Format.Money(d.Revenue)} · {d.Orders} đơn";
+                                <div class="col" tabindex="0" aria-label="@text">
+                                    @if (d.Revenue > 0)
+                                    {
+                                        <span class="col-bar" style="height: @Pct(d.Revenue, axisMax)%"></span>
+                                    }
+                                    <span class="col-tip" role="tooltip">
+                                        <strong>@d.Day.ToString("dd/MM/yyyy")</strong>
+                                        @Format.Money(d.Revenue) · @d.Orders đơn
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="chart-x" style="grid-template-columns: repeat(@Model.DayCount, 1fr)" aria-hidden="true">
+                        @for (var i = 0; i < Model.Days.Count; i++)
+                        {
+                            <span>@(i % labelEvery == 0 ? Model.Days[i].Day.ToString("dd/MM") : "")</span>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <details class="table-view">
+                <summary>Xem dạng bảng</summary>
+                <table class="data-table">
+                    <thead><tr><th>Ngày</th><th class="num">Số đơn</th><th class="num">Doanh thu</th></tr></thead>
+                    <tbody>
+                    @foreach (var d in Model.Days.Where(d => d.Orders > 0))
+                    {
+                        <tr><td>@d.Day.ToString("dd/MM/yyyy")</td><td class="num">@d.Orders</td><td class="num">@Format.Money(d.Revenue)</td></tr>
+                    }
+                    </tbody>
+                    <tfoot><tr><td>Tổng</td><td class="num">@Model.PaidOrders</td><td class="num">@Format.Money(Model.Revenue)</td></tr></tfoot>
+                </table>
+            </details>
+        }
+    </section>
+
+    <div class="report-grid">
+        <section class="card report-card">
+            <div class="section-head"><h2>Hình thức thanh toán</h2></div>
+            @if (Model.Revenue == 0)
+            {
+                <p class="empty">Chưa có dữ liệu.</p>
+            }
+            else
+            {
+                <div class="split-bar" role="img"
+                     aria-label="@string.Join(", ", Model.Methods.Select(m => $"{m.Method.ToText()} {Pct(m.Revenue, Model.Revenue)}%"))">
+                    @foreach (var m in Model.Methods.Where(m => m.Revenue > 0))
+                    {
+                        <span class="seg seg-@((int)m.Method)" style="width: @Pct(m.Revenue, Model.Revenue)%"
+                              title="@m.Method.ToText(): @Format.Money(m.Revenue)"></span>
+                    }
+                </div>
+                <ul class="split-legend">
+                    @foreach (var m in Model.Methods)
+                    {
+                        <li>
+                            <i class="swatch seg-@((int)m.Method)"></i>
+                            <span class="legend-name">@m.Method.ToText()</span>
+                            <span class="legend-value">@Format.Money(m.Revenue)</span>
+                            <span class="muted-inline">@m.Orders đơn · @(Model.Revenue > 0 ? (m.Revenue / Model.Revenue * 100).ToString("0.#", CultureInfo.GetCultureInfo("vi-VN")) : "0")%</span>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+
+        <section class="card report-card">
+            <div class="section-head"><h2>Doanh thu theo thu ngân</h2></div>
+            @if (Model.Cashiers.Count == 0)
+            {
+                <p class="empty">Chưa có dữ liệu.</p>
+            }
+            else
+            {
+                <table class="data-table">
+                    <thead><tr><th>Thu ngân</th><th class="num">Số đơn</th><th class="num">Đã thu</th></tr></thead>
+                    <tbody>
+                    @foreach (var c in Model.Cashiers)
+                    {
+                        <tr><td>@c.Name</td><td class="num">@c.Orders</td><td class="num">@Format.Money(c.Revenue)</td></tr>
+                    }
+                    </tbody>
+                </table>
+            }
+        </section>
+    </div>
+
+    <section class="card report-card">
+        <div class="section-head"><h2>Món bán chạy</h2><span class="muted-inline">10 món mang lại doanh thu cao nhất</span></div>
+        @if (Model.TopItems.Count == 0)
+        {
+            <p class="empty">Chưa có dữ liệu.</p>
+        }
+        else
+        {
+            <ol class="ranked">
+                @foreach (var item in Model.TopItems)
+                {
+                    <li>
+                        <span class="ranked-name">@item.Name <span class="muted-inline">× @item.Quantity</span></span>
+                        <span class="ranked-track">
+                            <span class="ranked-bar" style="width: @Pct(item.Revenue, maxItem)%"></span>
+                            <span class="ranked-value">@Format.Money(item.Revenue)</span>
+                        </span>
+                    </li>
+                }
+            </ol>
+        }
+    </section>
+</main>

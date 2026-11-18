@@ -1,0 +1,20 @@
+@page
+@{
+    ViewData["Title"] = "Trang chính";
+    var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var (roleName, roleDesc) = RoleNames.Display(role);
+}
+<main class="page">
+    <h1>Xin chào, @User.FindFirst("FullName")?.Value</h1>
+    <p>Bạn đang đăng nhập với vai trò <strong>@roleName</strong>: @roleDesc.</p>
+    @if (User.IsInRole(RoleNames.Cashier) || User.IsInRole(RoleNames.Admin))
+    {
+        <a asp-page="/Cashier/Index" class="btn btn-primary">Mở màn hình thu ngân</a>
+    }
+    @if (User.IsInRole(RoleNames.Admin))
+    {
+        <a asp-page="/Account/Register" class="btn btn-primary">Tạo tài khoản nhân viên</a>
+        <a asp-page="/Admin/QrCodes" class="btn btn-ghost">In mã QR bàn</a>
+        <a asp-page="/Admin/Revenue" class="btn btn-ghost">Báo cáo doanh thu</a>
+    }
+</main>

@@ -1,0 +1,144 @@
+@page "/order/t/{qrToken}"
+@model RestaurantOrder.Pages.Customer.TableModel
+@using RestaurantOrder.Models
+@{
+    ViewData["Title"] = Model.Table?.Name ?? "Gọi món";
+    var index = 0;
+}
+
+<main class="order-page">
+    <header class="order-head">
+        <p class="eyebrow">Gọi món tại bàn</p>
+        <h1>@Model.Table!.Name</h1>
+    </header>
+
+    @if (Model.Locked)
+    {
+        <section class="panel locked" role="alert">
+            <h2>Bàn đang có khách sử dụng</h2>
+            <p>Một điện thoại khác đã quét mã của bàn này. Nếu đó là nhầm lẫn, vui lòng nhờ thu ngân giải phóng bàn rồi quét lại.</p>
+        </section>
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(Model.StatusMessage))
+        {
+            <div class="notice" role="status">@Model.StatusMessage</div>
+        }
+
+        @if (Model.Orders.Count > 0)
+        {
+            <section class="my-orders">
+                <h2>Đơn của bàn</h2>
+                @foreach (var o in Model.Orders)
+                {
+                    <article class="order-card">
+                        <div class="order-row">
+                            <strong>@o.Code</strong>
+                            <span class="status status-@((int)o.Status)">@o.Status.ToText()</span>
+                        </div>
+                        <ul>
+                            @foreach (var i in o.Items)
+                            {
+                                <li>@i.Quantity × @i.MenuItem.Name</li>
+                            }
+                        </ul>
+                        <div class="order-row muted-row">
+                            <span>@o.CreatedAt.ToString("HH:mm")</span>
+                            <strong>@Format.Money(o.TotalAmount)</strong>
+                        </div>
+                        @if (o.Status == OrderStatus.Rejected && o.RejectReason is not null)
+                        {
+                            <p class="reject">Lý do: @o.RejectReason.Content</p>
+                        }
+                    </article>
+                }
+            </section>
+        }
+
+        <form method="post" id="order-form" novalidate>
+            <div asp-validation-summary="ModelOnly" class="alert" role="alert"></div>
+
+            @foreach (var c in Model.Menu.Where(c => c.MenuItems.Count > 0))
+            {
+                <section class="menu-group">
+                    <h2>@c.Name</h2>
+                    @foreach (var m in c.MenuItems)
+                    {
+                        <div class="dish @(m.IsAvailable ? "" : "sold-out")">
+                            <div class="dish-info">
+                                <span class="dish-name">@m.Name</span>
+                                <span class="dish-price">@Format.Money(m.Price)</span>
+                            </div>
+                            @if (m.IsAvailable)
+                            {
+                                <input type="hidden" name="Lines[@index].MenuItemId" value="@m.Id" />
+                                <div class="stepper">
+                                    <button type="button" class="step" data-step="-1" aria-label="Bớt @m.Name">−</button>
+                                    <input type="number" name="Lines[@index].Quantity" value="@Model.QuantityOf(m.Id)"
+                                           min="0" max="20" inputmode="numeric" data-price="@((int)m.Price)"
+                                           aria-label="Số lượng @m.Name" />
+                                    <button type="button" class="step" data-step="1" aria-label="Thêm @m.Name">+</button>
+                                </div>
+                                index++;
+                            }
+                            else
+                            {
+                                <span class="badge">Hết món</span>
+                            }
+                        </div>
+                    }
+                </section>
+            }
+
+            <div class="field">
+                <label asp-for="CustomerNote">Ghi chú cho đơn</label>
+                <textarea asp-for="CustomerNote" rows="2" maxlength="300" placeholder="Ví dụ: ít cay, không hành"></textarea>
+                <span asp-validation-for="CustomerNote" class="error"></span>
+            </div>
+
+            <div class="cart-bar">
+                <div>
+                    <span class="cart-count" id="cart-count">0 món</span>
+                    <strong class="cart-total" id="cart-total">0 đ</strong>
+                </div>
+                <button type="submit" class="btn btn-primary" id="submit-order" disabled>Gửi đơn</button>
+            </div>
+        </form>
+    }
+</main>
+
+@section Scripts {
+<script>
+(() => {
+    const form = document.getElementById('order-form');
+    if (!form) return;
+    const inputs = [...form.querySelectorAll('input[type=number]')];
+    const money = v => v.toLocaleString('vi-VN') + ' đ';
+
+    function refresh() {
+        let count = 0, total = 0;
+        for (const i of inputs) {
+            const q = Math.max(0, Math.min(20, parseInt(i.value) || 0));
+            count += q;
+            total += q * Number(i.dataset.price);
+            i.closest('.dish').classList.toggle('picked', q > 0);
+        }
+        document.getElementById('cart-count').textContent = count + ' món';
+        document.getElementById('cart-total').textContent = money(total);
+        document.getElementById('submit-order').disabled = count === 0;
+    }
+
+    form.addEventListener('click', e => {
+        const btn = e.target.closest('.step');
+        if (!btn) return;
+        const input = btn.parentElement.querySelector('input');
+        input.value = Math.max(0, Math.min(20, (parseInt(input.value) || 0) + Number(btn.dataset.step)));
+        refresh();
+    });
+    form.addEventListener('input', refresh);
+    form.addEventListener('submit', () => document.getElementById('submit-order').disabled = true);
+    refresh();
+})();
+</script>
+}

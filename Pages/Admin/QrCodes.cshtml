@@ -1,0 +1,56 @@
+@page
+@model RestaurantOrder.Pages.Admin.QrCodesModel
+@{ ViewData["Title"] = "Mã QR bàn"; }
+
+<main class="page page-wide">
+    <div class="no-print">
+        <h1>Mã QR bàn</h1>
+        <p class="muted">In và dán mỗi mã lên đúng bàn. Khách quét mã để xem thực đơn và gửi đơn, không cần đăng nhập.</p>
+
+        @if (!string.IsNullOrEmpty(Model.StatusMessage))
+        {
+            <div class="notice" role="status">@Model.StatusMessage</div>
+        }
+
+        @if (Model.LocalhostOnly)
+        {
+            <div class="alert" role="alert">
+                Web đang chỉ chạy cho máy này (localhost), điện thoại quét mã sẽ không vào được.
+                Chạy lại bằng <code>dotnet run --urls http://0.0.0.0:5090</code> rồi tải lại trang.
+            </div>
+        }
+
+        <form method="get" class="panel base-url">
+            <div class="field">
+                <label for="BaseUrl">Địa chỉ web trên mạng Wi-Fi</label>
+                <input id="BaseUrl" name="BaseUrl" value="@Model.BaseUrl" />
+                <span class="hint">Điện thoại phải dùng chung Wi-Fi với máy này. Đổi mạng thì sửa địa chỉ và in lại.</span>
+            </div>
+            <div class="actions">
+                <button type="submit" class="btn btn-ghost">Tạo lại mã</button>
+                <button type="button" class="btn btn-primary" onclick="window.print()">In mã QR</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="qr-grid">
+        @foreach (var t in Model.Tables)
+        {
+            <figure class="qr-card">
+                <figcaption>@t.Name</figcaption>
+                <div class="qr-img">@Html.Raw(t.Svg)</div>
+                <p class="qr-hint">Quét mã để gọi món</p>
+                <a class="qr-url no-print" href="@t.Url" target="_blank" rel="noopener">@t.Url</a>
+                @if (t.Occupied)
+                {
+                    <form method="post" asp-page-handler="Release" asp-route-id="@t.Id" class="qr-release no-print">
+                        <input type="hidden" name="BaseUrl" value="@Model.BaseUrl" />
+                        <span class="badge-busy">Đang có khách</span>
+                        <button type="submit" class="btn btn-ghost btn-sm"
+                                onclick="return confirm('Giải phóng @t.Name? Điện thoại đang giữ bàn sẽ phải quét lại.')">Giải phóng bàn</button>
+                    </form>
+                }
+            </figure>
+        }
+    </div>
+</main>

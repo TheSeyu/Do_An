@@ -1,0 +1,65 @@
+@page
+@model RestaurantOrder.Pages.Account.RegisterModel
+@{ ViewData["Title"] = "Tạo tài khoản nhân viên"; }
+
+<main class="page">
+    <h1>Tạo tài khoản nhân viên</h1>
+    <p class="muted">Nhân viên dùng tên đăng nhập và mật khẩu này để vào màn hình của vai trò được chọn.</p>
+
+    @if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="notice" role="status">@Model.StatusMessage</div>
+    }
+
+    <form method="post" class="panel" novalidate>
+        <div asp-validation-summary="ModelOnly" class="alert" role="alert"></div>
+
+        <div class="grid-2">
+            <div class="field">
+                <label asp-for="Input.FullName"></label>
+                <input asp-for="Input.FullName" autocomplete="off" />
+                <span asp-validation-for="Input.FullName" class="error"></span>
+            </div>
+            <div class="field">
+                <label asp-for="Input.Username"></label>
+                <input asp-for="Input.Username" autocomplete="off" />
+                <span asp-validation-for="Input.Username" class="error"></span>
+            </div>
+            <div class="field">
+                <label asp-for="Input.Password"></label>
+                <input asp-for="Input.Password" autocomplete="new-password" />
+                <span asp-validation-for="Input.Password" class="error"></span>
+            </div>
+            <div class="field">
+                <label asp-for="Input.ConfirmPassword"></label>
+                <input asp-for="Input.ConfirmPassword" autocomplete="new-password" />
+                <span asp-validation-for="Input.ConfirmPassword" class="error"></span>
+            </div>
+        </div>
+
+        <fieldset class="roles">
+            <legend>Vai trò</legend>
+            <div class="role-grid">
+            @foreach (var role in Model.Roles)
+            {
+                var (name, desc) = RoleNames.Display(role.Name);
+                <label class="role-option">
+                    <input type="radio" name="Input.RoleId" value="@role.Id"
+                           checked="@(Model.Input.RoleId == role.Id)"
+                           data-val="true" data-val-required="Chọn vai trò" />
+                    <span class="role-name">@name</span>
+                    <span class="role-desc">@desc</span>
+                </label>
+            }
+            </div>
+            <span asp-validation-for="Input.RoleId" class="error"></span>
+        </fieldset>
+
+        <div class="actions">
+            <a asp-page="/Index" class="btn btn-ghost">Hủy</a>
+            <button type="submit" class="btn btn-primary">Tạo tài khoản</button>
+        </div>
+    </form>
+</main>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }
